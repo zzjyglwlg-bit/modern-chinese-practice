@@ -35,6 +35,32 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+  // Audio upload endpoint for voice transcription
+  app.post("/api/upload-audio", async (req: any, res: any) => {
+    try {
+      const multer = await import("multer");
+      const multerFn = (multer as any).default || multer;
+      const upload = multerFn({ storage: multerFn.memoryStorage(), limits: { fileSize: 16 * 1024 * 1024 } });
+      upload.single("file")(req, res, async (err: any) => {
+        if (err) return res.status(400).json({ error: err.message });
+        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+        try {
+          const { storagePut } = await import("../storage");
+          const { nanoid } = await import("nanoid");
+          const key = `audio/${nanoid()}.webm`;
+          const { url } = await storagePut(key, req.file.buffer, req.file.mimetype);
+          res.json({ url });
+        } catch (uploadErr) {
+          console.error("Storage upload error:", uploadErr);
+          res.status(500).json({ error: "Upload failed" });
+        }
+      });
+    } catch (error) {
+      console.error("Audio upload error:", error);
+      res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",
